@@ -20,6 +20,8 @@
 html, body {
   margin: 0;
   height: 100%;
+  height: 100dvh;
+  overscroll-behavior: none;
   overflow: hidden;
   background: var(--bg);
   color: var(--ink);
@@ -27,8 +29,9 @@ html, body {
   font-weight: 800;
   user-select: none;
   -webkit-user-select: none;
-  touch-action: none;
+  -webkit-touch-callout: none;
 }
+button { touch-action: manipulation; }
 
 button {
   font: inherit;
@@ -69,7 +72,7 @@ button:disabled { cursor: default; opacity: 0.45; }
 .map-header {
   position: absolute; top: 0; left: 0; right: 0; z-index: 5;
   display: flex; align-items: center; gap: 10px;
-  padding: 14px 16px;
+  padding: calc(14px + env(safe-area-inset-top, 0px)) 16px 14px;
   background: linear-gradient(var(--bg) 70%, transparent);
 }
 .map-header h1 {
@@ -122,10 +125,44 @@ button:disabled { cursor: default; opacity: 0.45; }
 @keyframes bob { 50% { transform: translateY(-6px); } }
 
 /* ---------- game HUD ---------- */
-#board { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#board { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+#game-screen { touch-action: none; }
+
+/* world-anchored labels */
+#labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.lbl { position: absolute; left: 0; top: 0; white-space: nowrap; will-change: transform; }
+.lbl.badge {
+  background: #fff; color: var(--ink); border-radius: 999px; padding: 3px 10px; font-size: 14px;
+  box-shadow: 0 3px 0 rgba(40, 20, 100, 0.25);
+}
+.lbl.badge.big { font-size: 17px; padding: 4px 13px; }
+.lbl.badge.bad { background: #ffe0e0; color: #b02a2c; }
+.lbl.float {
+  font-size: 24px; font-weight: 900; color: #ffe066;
+  -webkit-text-stroke: 5px rgba(60, 30, 120, 0.75); paint-order: stroke fill;
+  animation: rise 1.4s ease-out both;
+}
+@keyframes rise {
+  0% { opacity: 0; margin-top: 10px; }
+  15% { opacity: 1; }
+  100% { opacity: 0; margin-top: -70px; }
+}
+
+/* camera controls */
+.cam-controls {
+  position: absolute; right: calc(10px + env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-50%);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.cam-btn {
+  width: 46px; height: 46px; border-radius: 50%;
+  background: rgba(255,255,255,0.82); color: var(--blue-deep); font-size: 22px;
+  box-shadow: var(--shadow); display: grid; place-items: center;
+}
+.cam-btn:active { transform: translateY(2px); }
+.cam-btn.compass span { display: inline-block; color: var(--red); font-size: 18px; transition: none; }
 
 .hud-top {
-  position: absolute; top: 10px; left: 10px; right: 10px;
+  position: absolute; top: calc(10px + env(safe-area-inset-top, 0px)); left: calc(10px + env(safe-area-inset-left, 0px)); right: calc(10px + env(safe-area-inset-right, 0px));
   display: flex; justify-content: space-between; align-items: flex-start;
   pointer-events: none;
 }
@@ -245,6 +282,16 @@ button:disabled { cursor: default; opacity: 0.45; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
 @media (max-width: 480px) {
+  .stat-bubble { width: 78px; }
+  .stat-bubble .ring { width: 54px; height: 54px; font-size: 24px; }
+  .stat-label { font-size: 13px; }
+  .mini-bar { width: 70px; }
+  .hud-left { gap: 6px; }
+  .cam-controls { flex-direction: row; top: calc(160px + env(safe-area-inset-top, 0px)); transform: none; gap: 6px; }
+  .cam-btn { width: 38px; height: 38px; font-size: 18px; }
+  .blueprint-btn { width: 80px; }
+  .blueprint-btn canvas { width: 66px; height: 48px; }
+  .icon-btn { width: 40px; height: 40px; font-size: 19px; }
   .tool { width: 66px; height: 66px; }
   .tool-ico { font-size: 32px; }
   .rainbow-hex { width: 36px; height: 32px; }
@@ -304,3 +351,34 @@ button:disabled { cursor: default; opacity: 0.45; }
 .legend i { width: 18px; height: 6px; border-radius: 3px; display: inline-block; }
 .breakdown { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; text-align: left; margin: 12px auto; max-width: 260px; font-size: 15px; }
 .breakdown span:nth-child(even) { text-align: right; }
+
+/* very small phones */
+@media (max-width: 360px) {
+  .tools { gap: 6px; }
+  .tool { width: 58px; height: 58px; }
+  .tool-ico { font-size: 28px; }
+  .big-btn { width: 56px; height: 56px; font-size: 30px; }
+  .sq-btn { width: 38px; height: 38px; font-size: 22px; }
+}
+
+/* landscape phones: compress vertically */
+@media (max-height: 520px) and (orientation: landscape) {
+  .hud-left { flex-direction: row; }
+  .stat-bubble .ring { width: 46px; height: 46px; font-size: 20px; border-width: 3px; }
+  .stat-label { margin-top: -8px; font-size: 12px; }
+  .q-slot.current { width: 72px; height: 62px; }
+  .q-slot.next { width: 46px; height: 42px; }
+  .hud-right { flex-direction: row-reverse; align-items: flex-start; }
+  .tool { width: 56px; height: 56px; }
+  .tool-ico { font-size: 26px; }
+  .rainbow-hex { width: 30px; height: 27px; }
+  .sq-btn { width: 38px; height: 38px; font-size: 22px; }
+  .bottom-bar .col { flex-direction: row; }
+  .big-btn { width: 54px; height: 54px; font-size: 28px; }
+  .blueprint-btn { bottom: auto; top: 50%; transform: translateY(-50%); }
+  .cam-controls { flex-direction: row; top: auto; bottom: calc(66px + var(--safe-b)); transform: none; }
+  .cam-btn { width: 38px; height: 38px; font-size: 17px; }
+  .level-title { display: none; }
+  .modal { max-height: 94vh; padding: 14px; }
+  .modal .big-stars { font-size: 32px; margin: 2px 0; }
+}

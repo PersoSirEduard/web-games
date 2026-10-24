@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>Land Builder</title>
   <meta name="theme-color" content="#8a7fdc" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Land Builder" />
+  <meta name="format-detection" content="telephone=no" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;800;900&display=swap" rel="stylesheet" />
@@ -28,6 +36,7 @@
   <!-- Gameplay -->
   <section id="game-screen" class="screen">
     <canvas id="board"></canvas>
+    <div id="labels" class="hidden"></div>
 
     <div class="hud-top">
       <div class="hud-left">
@@ -95,6 +104,13 @@
       <button class="sq-btn rot" id="btn-rot-cw" aria-label="Rotate right">⟳</button>
     </div>
 
+    <div class="cam-controls" aria-label="Camera">
+      <button class="cam-btn compass" id="btn-compass" aria-label="Reset view" title="Reset view (F)"><span id="compass-needle">▲</span></button>
+      <button class="cam-btn" id="btn-cam-left" aria-label="Orbit left" title="Orbit left (A)">⤺</button>
+      <button class="cam-btn" id="btn-cam-right" aria-label="Orbit right" title="Orbit right (D)">⤻</button>
+      <button class="cam-btn" id="btn-cam-tilt" aria-label="Change tilt" title="Tilt (T)">⛰</button>
+    </div>
+
     <div class="toast" id="toast"></div>
   </section>
 
@@ -103,6 +119,8 @@
     <div class="modal" id="modal"></div>
   </div>
 
+  <script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
   <script type="module" src="js/main.js"></script>
+  <noscript>Land Builder needs JavaScript and WebGL.</noscript>
 </body>
 </html>

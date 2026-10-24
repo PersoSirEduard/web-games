@@ -1,7 +1,8 @@
 // UI controller: level map, gameplay input, HUD and modals.
 import { LEVELS, KINDS, BIOMES, MEGAS, SCORE, RATING, CRATE_TILES } from './data.js';
 import { Game, openSlots, evalPlacement, evalMega, ratingFor, computeScore } from './game.js';
-import { BoardRenderer, renderTileIcon, renderBlueprintIcon } from './render.js';
+import { Board3D } from './board3d.js';
+import { renderTileIcon, renderBlueprintIcon } from './icons.js';
 import { key, parseKey } from './hex.js';
 
 const $ = (id) => document.getElementById(id);
@@ -49,6 +50,8 @@ function newStuff(i) {
 function showScreen(name) {
   for (const el of document.querySelectorAll('.screen')) el.classList.remove('active');
   $(name + '-screen').classList.add('active');
+  board.active = name === 'game';
+  $('labels').classList.toggle('hidden', name !== 'game');
   if (name === 'map') buildMap();
 }
 
@@ -87,7 +90,7 @@ function helpHtml() {
       <li>The next tiles are shown top-right. You only have a limited number — reach the ⭐ goal before you run out.</li>
       <li><b>Megastructures</b>: place a blueprint over land whose main terrain matches, or on empty space to create 🚧 construction sites. Fill each site with a tile whose main terrain matches (+${SCORE.part} each) and finish the whole structure for a big bonus 🏆.</li>
       <li>Tools: 🚜 clear a tile, 🌈 turn the current tile into a wildcard, 📦 get ${CRATE_TILES} extra tiles. ↶ ↷ undo / redo.</li>
-      <li>Drag to pan, pinch or scroll to zoom.</li>
+      <li><b>Camera</b>: drag to pan · pinch or scroll to zoom · twist two fingers (or right-drag / Shift-drag) to orbit · drag two fingers up/down to tilt. Buttons on the right orbit ⤺ ⤻, tilt ⛰ and reset 🧭 the view.</li>
     </ul>
     <div class="actions"><button class="btn green" data-close>Got it!</button></div>`;
 }
@@ -209,27 +212,43 @@ function toast(msg, onMap = false) {
 }
 
 // ---------- gameplay ----------
-const renderer = new BoardRenderer($('board'));
 const ui = {
   game: null, level: null, index: 0,
   mode: 'place',            // 'place' | 'mega' | 'bulldoze'
   preview: null,            // { q, r, k, ev }
   mega: null,               // mega preview
   rot: 0, megaRot: 0,
-  hover: null, anims: [], slots: new Map(),
+  hover: null,              // { q, r, k } under the mouse
+  slots: new Map(),
+  dropKey: null, celebrate: null,
   quotaShown: false, ended: false, bpType: null,
 };
+
+const board = new Board3D($('board'), $('labels'), {
+  onTap: (q, r) => onTap(q, r),
+  onHover: (h) => {
+    if (!ui.game || (h && h.k) === (ui.hover && ui.hover.k)) return;
+    ui.hover = h;
+    const target = h && (ui.slots.has(h.k) || ui.game.s.cons[h.k] || (ui.mode === 'bulldoze' && ui.game.s.tiles[h.k]) || ui.mode === 'mega');
+    $('board').style.cursor = target ? 'pointer' : 'grab';
+    syncBoard();
+  },
+  onCamera: (cam) => { $('compass-needle').style.transform = `rotate(${cam.yaw}rad)`; },
+});
+
+const haptic = (pattern) => { try { if (navigator.vibrate) navigator.vibrate(pattern); } catch { /* unsupported */ } };
 
 function startLevel(i) {
   ui.index = i;
   ui.level = LEVELS[i];
   ui.game = new Game(ui.level);
-  Object.assign(ui, { mode: 'place', preview: null, mega: null, rot: 0, megaRot: 0, hover: null, anims: [], quotaShown: false, ended: false, bpType: null });
+  Object.assign(ui, { mode: 'place', preview: null, mega: null, rot: 0, megaRot: 0, hover: null, dropKey: null, celebrate: null, quotaShown: false, ended: false, bpType: null });
   $('hud-level').textContent = `Level ${ui.level.id} · ${ui.level.name}`;
   showScreen('game');
-  renderer.resize();
+  board.resize();
+  board.setGame();
   refresh();
-  fitView();
+  fitView({ intro: true });
   if (!progress.seenHelp) {
     progress.seenHelp = true;
     saveProgress();
@@ -238,18 +257,18 @@ function startLevel(i) {
 }
 
 function playArea() {
-  const w = renderer.w, h = renderer.h;
+  const w = board.w, h = board.h2;
   const top = w < 600 ? 170 : 130, bottom = w < 600 ? 120 : 130;
   return { x: 16, y: top, w: w - 32, h: Math.max(120, h - top - bottom) };
 }
 
-function fitView(animate = false) {
+function fitView(opts = {}) {
   const s = ui.game.s;
   const cells = [...Object.values(s.tiles).map((t) => [t.q, t.r]), ...Object.values(s.cons).map((c) => [c.q, c.r])];
-  const pad = cells.length < 4 ? 2.5 : 1;
+  const pad = cells.length < 4 ? 1.5 : 0.6;
   const ext = [];
   for (const [q, r] of cells) ext.push([q - pad, r], [q + pad, r], [q, r - pad], [q, r + pad]);
-  renderer.fit(cells.concat(ext), playArea(), animate);
+  board.fit(cells.concat(ext), { ...opts, area: playArea() });
 }
 
 function previewTile() {
@@ -270,6 +289,21 @@ function refresh() {
     else ui.mega = { ...evalMega(s, bp.type, ui.mega.q, ui.mega.r, ui.megaRot), type: bp.type, q: ui.mega.q, r: ui.mega.r };
   }
   updateHud();
+  syncBoard();
+}
+
+function syncBoard() {
+  const g = ui.game;
+  board.sync(g.s, {
+    slots: ui.slots,
+    preview: ui.mode === 'place' && ui.preview && ui.preview.ev && g.tile ? { ...ui.preview, tile: previewTile() } : null,
+    mega: ui.mode === 'mega' ? ui.mega : null,
+    mode: ui.mode,
+    hover: ui.hover,
+    dropKey: ui.dropKey,
+    celebrate: ui.celebrate,
+  });
+  ui.dropKey = ui.celebrate = null;
 }
 
 function updateHud() {
@@ -349,14 +383,10 @@ function cancel() {
 }
 
 function addFloat(q, r, text, color, delay = 0) {
-  ui.anims.push({ type: 'float', q, r, text, color, start: performance.now() + delay, dur: 1300 });
+  board.float(q, r, text, color, delay);
 }
 function addBurst(q, r) {
-  const parts = Array.from({ length: 26 }, () => {
-    const a = Math.random() * Math.PI * 2, v = 0.3 + Math.random() * 0.6;
-    return { vx: Math.cos(a) * v, vy: Math.sin(a) * v - 0.6, c: ['#ffcf33', '#ff6b9d', '#5ec8ff', '#7ee081', '#ffffff'][Math.floor(Math.random() * 5)] };
-  });
-  ui.anims.push({ type: 'burst', q, r, parts, start: performance.now(), dur: 1100 });
+  board.burst(q, r);
 }
 
 function confirm() {
@@ -373,7 +403,8 @@ function confirm() {
     if (after.total > before.total) addFloat(c0.q, c0.r, `+${after.total - before.total} ⭐`);
     if (after.completed > before.completed) {
       addBurst(c0.q, c0.r);
-      ui.anims.push({ type: 'complete', sid: res.sid, start: performance.now(), dur: 500 });
+      ui.celebrate = res.sid;
+      haptic([20, 40, 30]);
       toast(`🏆 ${MEGAS[type].name} complete!`);
     } else {
       toast(`🚧 Fill the construction sites with matching tiles`);
@@ -390,7 +421,8 @@ function confirm() {
   const res = g.place(q, r, ui.rot);
   if (!res.ok) return toast(res.reason);
   const after = computeScore(g.s);
-  ui.anims.push({ type: 'drop', k, start: performance.now(), dur: 220 });
+  ui.dropKey = k;
+  haptic(12);
   const delta = after.total - before.total;
   addFloat(q, r, delta > 0 ? `+${delta} ⭐` : '+0', delta > 0 ? '#ffe066' : '#ffffff');
   if (ev.newPerfects) addFloat(q, r, 'Perfect! ✨', '#9effc0', 350);
@@ -398,7 +430,8 @@ function confirm() {
     const st = g.s.structs.find((x) => x.sid === res.tile.mega);
     addBurst(q, r);
     if (st) {
-      ui.anims.push({ type: 'complete', sid: st.sid, start: performance.now(), dur: 500 });
+      ui.celebrate = st.sid;
+      haptic([20, 40, 30]);
       toast(`🏆 ${MEGAS[st.type].name} complete! +${MEGAS[st.type].bonus}`);
     }
   } else if (ev.fillsPart) {
@@ -413,8 +446,8 @@ function confirm() {
 
 // Re-frame the board when the land grows past the visible play area.
 function keepInView(q, r) {
-  const a = playArea(), [x, y] = renderer.toScreen(q, r), m = renderer.cam.zoom * 1.6;
-  if (x < a.x + m || x > a.x + a.w - m || y < a.y + m || y > a.y + a.h - m) fitView(true);
+  const a = playArea(), [x, y] = board.toScreen(q, r), m = 50;
+  if (x < a.x + m || x > a.x + a.w - m || y < a.y + m || y > a.y + a.h - m) fitView();
 }
 
 function recordBest() {
@@ -547,9 +580,8 @@ function enterBulldoze() {
   refresh();
 }
 
-function onTap(x, y) {
+function onTap(q, r) {
   const g = ui.game, s = g.s;
-  const [q, r] = renderer.toHex(x, y);
   const k = key(q, r);
   if (ui.mode === 'mega') {
     if (ui.mega && ui.mega.q === q && ui.mega.r === r) rotate(1);
@@ -571,73 +603,7 @@ function onTap(x, y) {
   if (ui.preview) cancel();
 }
 
-// ---------- input ----------
-const canvas = $('board');
-const pointers = new Map();
-let drag = null, pinchDist = 0, pinchMid = null;
-
-canvas.addEventListener('pointerdown', (e) => {
-  canvas.setPointerCapture(e.pointerId);
-  pointers.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
-  if (pointers.size === 1) {
-    drag = { sx: e.offsetX, sy: e.offsetY, cx: renderer.cam.x, cy: renderer.cam.y, moved: false };
-  } else if (pointers.size === 2) {
-    const [a, b] = [...pointers.values()];
-    pinchDist = Math.hypot(a.x - b.x, a.y - b.y);
-    pinchMid = [(a.x + b.x) / 2, (a.y + b.y) / 2];
-    if (drag) drag.moved = true;
-  }
-});
-
-canvas.addEventListener('pointermove', (e) => {
-  if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
-  if (pointers.size === 2) {
-    const [a, b] = [...pointers.values()];
-    const d = Math.hypot(a.x - b.x, a.y - b.y);
-    const mid = [(a.x + b.x) / 2, (a.y + b.y) / 2];
-    if (pinchDist > 0) renderer.zoomAt(mid[0], mid[1], d / pinchDist);
-    renderer.cam.x += mid[0] - pinchMid[0];
-    renderer.cam.y += mid[1] - pinchMid[1];
-    pinchDist = d;
-    pinchMid = mid;
-    return;
-  }
-  if (drag && pointers.size === 1) {
-    const dx = e.offsetX - drag.sx, dy = e.offsetY - drag.sy;
-    if (!drag.moved && Math.hypot(dx, dy) > 7) drag.moved = true;
-    if (drag.moved) {
-      renderer.target = null;
-      renderer.cam.x = drag.cx + dx;
-      renderer.cam.y = drag.cy + dy;
-    }
-  }
-  if (e.pointerType === 'mouse' && ui.game) {
-    const [q, r] = renderer.toHex(e.offsetX, e.offsetY);
-    ui.hover = key(q, r);
-    canvas.style.cursor = drag && drag.moved ? 'grabbing' : (ui.slots.has(ui.hover) || ui.game.s.cons[ui.hover] || ui.mode !== 'place') ? 'pointer' : 'grab';
-  }
-});
-
-function endPointer(e) {
-  if (!pointers.has(e.pointerId)) return;
-  pointers.delete(e.pointerId);
-  if (pointers.size === 0) {
-    if (drag && !drag.moved && e.type === 'pointerup') onTap(e.offsetX, e.offsetY);
-    drag = null;
-    pinchDist = 0;
-  } else if (pointers.size === 1) {
-    const [p] = [...pointers.values()];
-    drag = { sx: p.x, sy: p.y, cx: renderer.cam.x, cy: renderer.cam.y, moved: true };
-  }
-}
-canvas.addEventListener('pointerup', endPointer);
-canvas.addEventListener('pointercancel', endPointer);
-canvas.addEventListener('pointerleave', () => { ui.hover = null; });
-canvas.addEventListener('wheel', (e) => {
-  e.preventDefault();
-  renderer.zoomAt(e.offsetX, e.offsetY, Math.exp(-e.deltaY * 0.0015));
-}, { passive: false });
-
+// ---------- buttons ----------
 $('btn-confirm').onclick = confirm;
 $('btn-cancel').onclick = cancel;
 $('btn-rot-cw').onclick = () => rotate(1);
@@ -645,8 +611,12 @@ $('btn-rot-ccw').onclick = () => rotate(-1);
 $('q-current').onclick = () => rotate(1);
 $('btn-undo').onclick = doUndo;
 $('btn-redo').onclick = doRedo;
-$('btn-zoom-in').onclick = () => renderer.zoomAt(renderer.w / 2, renderer.h / 2, 1.2);
-$('btn-zoom-out').onclick = () => renderer.zoomAt(renderer.w / 2, renderer.h / 2, 1 / 1.2);
+$('btn-zoom-in').onclick = () => board.zoom(1 / 1.25);
+$('btn-zoom-out').onclick = () => board.zoom(1.25);
+$('btn-cam-left').onclick = () => board.orbit(-1);
+$('btn-cam-right').onclick = () => board.orbit(1);
+$('btn-cam-tilt').onclick = () => board.cycleTilt();
+$('btn-compass').onclick = () => { board.resetYaw(); fitView(); };
 $('btn-blueprint').onclick = enterMega;
 $('tool-bulldozer').onclick = enterBulldoze;
 $('tool-rainbow').onclick = () => {
@@ -683,44 +653,20 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'enter' || k === ' ') { e.preventDefault(); confirm(); }
   else if (k === 'escape') cancel();
   else if (k === 'b') enterMega();
-  else if (k === '+' || k === '=') renderer.zoomAt(renderer.w / 2, renderer.h / 2, 1.2);
-  else if (k === '-') renderer.zoomAt(renderer.w / 2, renderer.h / 2, 1 / 1.2);
-  else if (k === 'f') fitView(true);
+  else if (k === '+' || k === '=') board.zoom(1 / 1.25);
+  else if (k === '-') board.zoom(1.25);
+  else if (k === ',' || k === 'a') board.orbit(-1);
+  else if (k === '.' || k === 'd') board.orbit(1);
+  else if (k === 't') board.cycleTilt();
+  else if (k === 'f') fitView();
 });
 
 window.addEventListener('resize', () => {
-  if ($('game-screen').classList.contains('active')) {
-    renderer.resize();
-    updateHud();
-  } else buildMap();
+  if ($('game-screen').classList.contains('active')) updateHud();
+  else buildMap();
 });
 
-// ---------- main loop ----------
-function frame(time) {
-  if ($('game-screen').classList.contains('active') && ui.game) {
-    renderer.step();
-    ui.anims = ui.anims.filter((a) => time - a.start < a.dur);
-    const g = ui.game;
-    let preview = null;
-    if (ui.mode === 'place' && ui.preview && ui.preview.ev) {
-      preview = { ...ui.preview, tile: previewTile() };
-    }
-    renderer.render({
-      game: g,
-      preview,
-      megaPreview: ui.mode === 'mega' ? ui.mega : null,
-      hover: ui.hover,
-      anims: ui.anims,
-      time,
-      mode: ui.mode,
-      slots: ui.slots,
-    });
-  }
-  requestAnimationFrame(frame);
-}
-
 // Expose a tiny hook for automated testing.
-window.__landBuilder = { ui, startLevel, progress: () => progress, toScreen: (q, r) => renderer.toScreen(q, r) };
+window.__landBuilder = { ui, startLevel, progress: () => progress, toScreen: (q, r, y) => board.toScreen(q, r, y), board, select: (q, r) => onTap(q, r) };
 
 showScreen('map');
-requestAnimationFrame(frame);
