@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>Land Builder</title>
+  <meta name="theme-color" content="#8a7fdc" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <!-- Level progression map -->
+  <section id="map-screen" class="screen active">
+    <header class="map-header">
+      <h1>Land Builder</h1>
+      <div class="pill"><span class="ico">⭐</span><span id="map-total-stars">0</span></div>
+      <button class="icon-btn" id="btn-help-map" aria-label="How to play">?</button>
+    </header>
+    <div id="map-scroll">
+      <div id="map-track">
+        <svg id="map-path" aria-hidden="true"></svg>
+      </div>
+    </div>
+  </section>
+
+  <!-- Gameplay -->
+  <section id="game-screen" class="screen">
+    <canvas id="board"></canvas>
+
+    <div class="hud-top">
+      <div class="hud-left">
+        <div class="stat-bubble stars" title="Stars">
+          <div class="ring"><span>⭐</span></div>
+          <div class="stat-label"><b id="hud-score">0</b>/<span id="hud-quota">0</span></div>
+          <div class="mini-bar"><div id="hud-bar"></div><i id="hud-mark2"></i><i id="hud-mark3"></i></div>
+        </div>
+        <div class="stat-bubble tiles" title="Tiles left">
+          <div class="ring"><span>🧱</span></div>
+          <div class="stat-label"><b id="hud-tiles">0</b> left</div>
+        </div>
+      </div>
+
+      <div class="hud-right">
+        <div class="queue" id="queue">
+          <div class="q-slot current" id="q-current" title="Current tile (tap to rotate)">
+            <canvas id="q0"></canvas>
+            <span class="q-badge" id="q-count">0</span>
+          </div>
+          <div class="q-slot next"><canvas id="q1"></canvas></div>
+          <div class="q-slot next"><canvas id="q2"></canvas></div>
+        </div>
+        <div class="hud-buttons">
+          <button class="icon-btn" id="btn-help" aria-label="How to play">?</button>
+          <button class="icon-btn" id="btn-menu" aria-label="Back to map">☰</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="level-title" id="hud-level"></div>
+
+    <button class="blueprint-btn" id="btn-blueprint" aria-label="Megastructure blueprint">
+      <canvas id="bp-icon"></canvas>
+      <span class="bp-name" id="bp-name"></span>
+      <span class="bp-state" id="bp-state"></span>
+    </button>
+
+    <div class="bottom-bar" id="bottom-bar">
+      <div class="col">
+        <button class="sq-btn" id="btn-undo" aria-label="Undo">↶</button>
+        <button class="sq-btn" id="btn-redo" aria-label="Redo">↷</button>
+      </div>
+      <div class="tools">
+        <button class="tool" id="tool-bulldozer" title="Bulldozer: clear a placed tile">
+          <span class="tool-ico">🚜</span><span class="count" id="cnt-bulldozer">1</span>
+        </button>
+        <button class="tool" id="tool-rainbow" title="Rainbow tile: swap the current tile for a wildcard that matches everything">
+          <span class="tool-ico rainbow-hex"></span><span class="count" id="cnt-rainbow">1</span>
+        </button>
+        <button class="tool" id="tool-crate" title="Crate: +4 tiles">
+          <span class="tool-ico">📦</span><span class="count" id="cnt-crate">1</span>
+        </button>
+      </div>
+      <div class="col">
+        <button class="sq-btn" id="btn-zoom-in" aria-label="Zoom in">+</button>
+        <button class="sq-btn" id="btn-zoom-out" aria-label="Zoom out">−</button>
+      </div>
+    </div>
+
+    <div class="confirm-bar hidden" id="confirm-bar">
+      <button class="sq-btn rot" id="btn-rot-ccw" aria-label="Rotate left">⟲</button>
+      <button class="big-btn no" id="btn-cancel" aria-label="Cancel">✕</button>
+      <button class="big-btn yes" id="btn-confirm" aria-label="Confirm">✓</button>
+      <button class="sq-btn rot" id="btn-rot-cw" aria-label="Rotate right">⟳</button>
+    </div>
+
+    <div class="toast" id="toast"></div>
+  </section>
+
+  <!-- Modal / sheet -->
+  <div class="overlay hidden" id="overlay">
+    <div class="modal" id="modal"></div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
